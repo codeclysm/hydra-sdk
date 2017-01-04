@@ -9,6 +9,9 @@ import (
 	"net/url"
 	"path"
 
+	"golang.org/x/net/context"
+	"golang.org/x/oauth2/clientcredentials"
+
 	"github.com/juju/errors"
 	"github.com/ory-am/hydra/pkg"
 )
@@ -40,6 +43,34 @@ type ClientGetter interface {
 type ClientManager struct {
 	Endpoint *url.URL
 	Client   *http.Client
+}
+
+// NewClientManager returns a ClientManager connected to the hydra cluster
+// it can fail if the cluster is not a valid url, or if the id and secret don't work
+func NewClientManager(id, secret, cluster string) (*ClientManager, error) {
+	uri, err := url.Parse(cluster)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse url %s", cluster)
+	}
+
+	credentials := clientcredentials.Config{
+		ClientID:     id,
+		ClientSecret: secret,
+		TokenURL:     pkg.JoinURL(uri, "oauth2/token").String(),
+		Scopes:       []string{"hydra"},
+	}
+
+	ctx := context.Background()
+	_, err = credentials.Token(ctx)
+	if err != nil {
+		return nil, errors.Annotatef(err, "connect to cluster %s", cluster)
+	}
+
+	manager := ClientManager{
+		Endpoint: joinURL(uri, "clients"),
+		Client:   credentials.Client(ctx),
+	}
+	return &manager, nil
 }
 
 // Get queries the hydra api to retrieve a specific client by their ID.
