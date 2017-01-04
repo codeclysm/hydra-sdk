@@ -3,17 +3,10 @@
 package hydrasdk
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
-
-	"golang.org/x/net/context"
-	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/juju/errors"
-	"github.com/ory-am/hydra/pkg"
 )
 
 // Client is an oauth2 client saved on hydra database
@@ -48,65 +41,24 @@ type ClientManager struct {
 // NewClientManager returns a ClientManager connected to the hydra cluster
 // it can fail if the cluster is not a valid url, or if the id and secret don't work
 func NewClientManager(id, secret, cluster string) (*ClientManager, error) {
-	uri, err := url.Parse(cluster)
+	endpoint, client, err := authenticate(id, secret, cluster)
 	if err != nil {
-		return nil, errors.Annotatef(err, "parse url %s", cluster)
-	}
-
-	credentials := clientcredentials.Config{
-		ClientID:     id,
-		ClientSecret: secret,
-		TokenURL:     pkg.JoinURL(uri, "oauth2/token").String(),
-		Scopes:       []string{"hydra"},
-	}
-
-	ctx := context.Background()
-	_, err = credentials.Token(ctx)
-	if err != nil {
-		return nil, errors.Annotatef(err, "connect to cluster %s", cluster)
+		return nil, errors.Annotate(err, "Instantiate ClientManager")
 	}
 
 	manager := ClientManager{
-		Endpoint: joinURL(uri, "clients"),
-		Client:   credentials.Client(ctx),
+		Endpoint: joinURL(endpoint, "clients"),
+		Client:   client,
 	}
 	return &manager, nil
 }
 
 // Get queries the hydra api to retrieve a specific client by their ID.
 func (m ClientManager) Get(id string) (*Client, error) {
-	url := pkg.JoinURL(m.Endpoint, id).String()
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, errors.Annotatef(err, "new request for %s", url)
-	}
-
-	resp, err := m.Client.Do(req)
-	if err != nil {
-		return nil, errors.Annotatef(err, "execute request %+v", req)
-	}
-	defer resp.Body.Close()
+	url := joinURL(m.Endpoint, id).String()
 
 	var client *Client
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return nil, errors.Errorf("Expected status code %d, got %d.\n%s\n", http.StatusOK, resp.StatusCode, body)
-	} else if err := json.NewDecoder(resp.Body).Decode(client); err != nil {
-		return nil, errors.Annotatef(err, "decode json %s", resp.Body)
-	}
+	bind(m.Client, url, client)
 
 	return client, nil
-}
-
-func joinURL(u *url.URL, args ...string) (ep *url.URL) {
-	ep = copyURL(u)
-	ep.Path = path.Join(append([]string{ep.Path}, args...)...)
-	return ep
-}
-
-func copyURL(u *url.URL) *url.URL {
-	a := new(url.URL)
-	*a = *u
-	return a
 }
