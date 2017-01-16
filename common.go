@@ -26,12 +26,7 @@ func copyURL(u *url.URL) *url.URL {
 }
 
 // bind does a get request and binds the body to the given interface
-func bind(client *http.Client, uri string, o interface{}) error {
-	req, err := http.NewRequest("GET", uri, nil)
-	if err != nil {
-		return errors.Annotatef(err, "new request for %s", uri)
-	}
-
+func bind(client *http.Client, req *http.Request, o interface{}) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Annotatef(err, "execute request %+v", req)

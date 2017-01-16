@@ -57,8 +57,16 @@ func NewClientManager(id, secret, cluster string) (*ClientManager, error) {
 func (m ClientManager) Get(id string) (*Client, error) {
 	url := joinURL(m.Endpoint, id).String()
 
-	var client *Client
-	bind(m.Client, url, client)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errors.Annotatef(err, "new request for %s", url)
+	}
 
+	var client *Client
+
+	err = bind(m.Client, req, client)
+	if err != nil {
+		return nil, err
+	}
 	return client, nil
 }

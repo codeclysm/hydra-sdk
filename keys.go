@@ -50,8 +50,16 @@ func (m CachedKeyManager) GetRSAPublic(set string) (*rsa.PublicKey, error) {
 
 	url := joinURL(m.Endpoint, set).String()
 
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errors.Annotatef(err, "new request for %s", url)
+	}
+
 	var keyset *jose.JsonWebKeySet
-	bind(m.Client, url, keyset)
+	err = bind(m.Client, req, keyset)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(keyset.Keys) == 0 {
 		return nil, errors.New("The retrieved keyset is empty")
@@ -78,8 +86,16 @@ func (m CachedKeyManager) GetRSAPrivate(set string) (*rsa.PrivateKey, error) {
 
 	url := joinURL(m.Endpoint, set).String()
 
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errors.Annotatef(err, "new request for %s", url)
+	}
+
 	var keyset *jose.JsonWebKeySet
-	bind(m.Client, url, keyset)
+	err = bind(m.Client, req, keyset)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(keyset.Keys) == 0 {
 		return nil, errors.New("The retrieved keyset is empty")
