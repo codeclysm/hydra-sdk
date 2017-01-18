@@ -16,14 +16,14 @@ func NewIntrospecterMocker() *IntrospecterMocker {
 }
 
 // Introspect accepts a token in this form:
-//   "userid:scope1,scope2"
+//   "userid.scope1,scope2"
 // and will return an appropriate introspection
 func (m IntrospecterMocker) Introspect(token string, scopes ...string) (*Introspection, error) {
 	introspection := new(Introspection)
 
-	parts := strings.Split(token, ":")
+	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
-		return nil, errors.New("The token must be in the form 'userid:scope1,scope2'")
+		return nil, errors.New("The token must be in the form 'userid.scope1,scope2'")
 	}
 
 	introspection.Subject = parts[0]
