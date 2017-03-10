@@ -1,6 +1,7 @@
 package hydrasdk
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -33,11 +34,12 @@ func bind(client *http.Client, req *http.Request, o interface{}) error {
 	}
 	defer resp.Body.Close()
 
+	body, _ := ioutil.ReadAll(resp.Body)
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
 		return errors.Errorf("Expected status code %d, got %d.\n%s\n", http.StatusOK, resp.StatusCode, body)
-	} else if err := json.NewDecoder(resp.Body).Decode(o); err != nil {
-		return errors.Annotatef(err, "decode json %s", resp.Body)
+	} else if err := json.NewDecoder(bytes.NewBuffer(body)).Decode(o); err != nil {
+		return errors.Annotatef(err, "decode json %s", body)
 	}
 	return nil
 }

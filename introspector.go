@@ -2,117 +2,88 @@ package hydrasdk
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/codeclysm/introspector"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/juju/errors"
 )
 
-// Introspection contains an access token's session data as specified by IETF RFC 7662, see:
-// https://tools.ietf.org/html/rfc7662
-type Introspection struct {
-	// Active is a boolean indicator of whether or not the presented token
-	// is currently active.  The specifics of a token's "active" state
-	// will vary depending on the implementation of the authorization
-	// server and the information it keeps about its tokens, but a "true"
-	// value return for the "active" property will generally indicate
-	// that a given token has been issued by this authorization server,
-	// has not been revoked by the resource owner, and is within its
-	// given time window of validity (e.g., after its issuance time and
-	// before its expiration time).
-	Active bool `json:"active"`
-
-	// Scope is a JSON string containing a space-separated list of
-	// scopes associated with this token.
-	Scope string `json:"scope,omitempty"`
-
-	// ClientID is aclient identifier for the OAuth 2.0 client that
-	// requested this token.
-	ClientID string `json:"client_id,omitempty"`
-
-	// Subject of the token, as defined in JWT [RFC7519].
-	// Usually a machine-readable identifier of the resource owner who
-	// authorized this token.
-	Subject string `json:"sub,omitempty"`
-
-	// Expires at is an integer timestamp, measured in the number of seconds
-	// since January 1 1970 UTC, indicating when this token will expire.
-	ExpiresAt int64 `json:"exp,omitempty"`
-
-	// Issued at is an integer timestamp, measured in the number of seconds
-	// since January 1 1970 UTC, indicating when this token was
-	// originally issued.
-	IssuedAt int64 `json:"iat,omitempty"`
-
-	// NotBefore is an integer timestamp, measured in the number of seconds
-	// since January 1 1970 UTC, indicating when this token is not to be
-	// used before.
-	NotBefore int64 `json:"nbf,omitempty"`
-
-	// Username is a human-readable identifier for the resource owner who
-	// authorized this token.
-	Username string `json:"username,omitempty"`
-
-	// Audience is a service-specific string identifier or list of string
-	// identifiers representing the intended audience for this token.
-	Audience string `json:"aud,omitempty"`
-
-	// Issuer is a string representing the issuer of this token
-	Issuer string `json:"iss,omitempty"`
-
-	// Extra is arbitrary data set by the session.
-	Extra map[string]interface{} `json:"ext,omitempty"`
-}
-
-// Introspector is an abstraction that allows you to retrieve the info of a token
-type Introspector interface {
-	Introspect(token string, scopes ...string) (*Introspection, error)
-}
-
-// Introspecter uses hydra rest apis to retrieve clients
-type Introspecter struct {
+// Introspector uses hydra rest apis to retrieve clients
+type Introspector struct {
 	Endpoint *url.URL
 	Client   *http.Client
 }
 
-// NewIntrospecter returns a Introspecter connected to the hydra cluster
+// NewIntrospector returns a Introspector connected to the hydra cluster
 // it can fail if the cluster is not a valid url, or if the id and secret don't work
-func NewIntrospecter(id, secret, cluster string) (*Introspecter, error) {
+func NewIntrospector(id, secret, cluster string) (*Introspector, error) {
 	endpoint, client, err := authenticate(id, secret, cluster)
 	if err != nil {
-		return nil, errors.Annotate(err, "Instantiate Introspecter")
+		return nil, errors.Annotate(err, "Instantiate Introspector")
 	}
 
-	manager := Introspecter{
-		Endpoint: joinURL(endpoint, "oauth2", "introspect"),
+	manager := Introspector{
+		Endpoint: joinURL(endpoint, "warden", "token", "allowed"),
 		Client:   client,
 	}
 	return &manager, nil
 }
 
-// Introspect calls the hydra endpoint to retrieve the info of a token
-func (m Introspecter) Introspect(token string, scopes ...string) (*Introspection, error) {
-	data := url.Values{
-		"token": []string{token},
-		"scope": []string{strings.Join(scopes, " ")},
+type req struct {
+	Scopes   []string          `json:"scopes"`
+	Token    string            `json:"token"`
+	Resource string            `json:"resource"`
+	Action   string            `json:"action"`
+	Context  map[string]string `json:"context"`
+}
+
+type res struct {
+	introspector.Introspection
+	Allowed   bool      `json:"allowed"`
+	IssuedAt  time.Time `json:"iat"`
+	ExpiresAt time.Time `json:"exp"`
+	Scopes    []string  `json:"scopes"`
+}
+
+// Allowed calls the hydra endpoint to retrieve the info of a token and see if it has the permission to perform an action
+func (m *Introspector) Allowed(token string, perm introspector.Permission, scopes ...string) (*introspector.Introspection, bool, error) {
+	payload := req{
+		Token:    token,
+		Scopes:   scopes,
+		Resource: perm.Resource,
+		Action:   perm.Action,
+		Context:  perm.Context,
+	}
+
+	data, err := json.Marshal(&payload)
+	if err != nil {
+		return nil, false, errors.Annotatef(err, "marshal payload %+v", payload)
 	}
 
 	url := m.Endpoint.String()
-
-	req, err := http.NewRequest("POST", url, bytes.NewBufferString(data.Encode()))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.Annotatef(err, "new request for %s", url)
+		return nil, false, errors.Annotatef(err, "new request for %s", url)
 	}
 
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Content-Length", strconv.Itoa(len(data)))
 
-	var introspection *Introspection
-	err = bind(m.Client, req, introspection)
+	var i res
+	err = bind(m.Client, req, &i)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return introspection, nil
+	i.Introspection.Scope = strings.Join(i.Scopes, " ")
+	i.Introspection.IssuedAt = i.IssuedAt.Unix()
+	i.Introspection.ExpiresAt = i.ExpiresAt.Unix()
+	spew.Dump(i)
+
+	return &i.Introspection, i.Allowed, nil
 }
