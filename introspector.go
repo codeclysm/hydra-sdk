@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/codeclysm/introspector"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/juju/errors"
 )
 
@@ -83,7 +82,6 @@ func (m *Introspector) Allowed(token string, perm introspector.Permission, scope
 	i.Introspection.Scope = strings.Join(i.Scopes, " ")
 	i.Introspection.IssuedAt = i.IssuedAt.Unix()
 	i.Introspection.ExpiresAt = i.ExpiresAt.Unix()
-	spew.Dump(i)
 
 	return &i.Introspection, i.Allowed, nil
 }
