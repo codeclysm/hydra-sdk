@@ -54,10 +54,9 @@ type res struct {
 
 // Introspect queries the endpoint with an http request. It expects that the endpoint
 // implements https://tools.ietf.org/html/rfc7662
-func (m *Introspector) Introspect(token string, scopes ...string) (*introspector.Introspection, error) {
+func (m *Introspector) Introspect(token string) (*introspector.Introspection, error) {
 	data := url.Values{
 		"token": []string{token},
-		"scope": []string{strings.Join(scopes, " ")},
 	}
 
 	url := m.IntrospectEndpoint.String()
