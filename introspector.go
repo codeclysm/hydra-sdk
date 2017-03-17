@@ -15,8 +15,9 @@ import (
 
 // Introspector uses hydra rest apis to retrieve clients
 type Introspector struct {
-	Endpoint *url.URL
-	Client   *http.Client
+	AllowedEndpoint    *url.URL
+	IntrospectEndpoint *url.URL
+	Client             *http.Client
 }
 
 // NewIntrospector returns a Introspector connected to the hydra cluster
@@ -28,8 +29,9 @@ func NewIntrospector(id, secret, cluster string) (*Introspector, error) {
 	}
 
 	manager := Introspector{
-		Endpoint: joinURL(endpoint, "warden", "token", "allowed"),
-		Client:   client,
+		AllowedEndpoint:    joinURL(endpoint, "warden", "token", "allowed"),
+		IntrospectEndpoint: joinURL(endpoint, "oauth2", "introspect"),
+		Client:             client,
 	}
 	return &manager, nil
 }
@@ -50,6 +52,35 @@ type res struct {
 	Scopes    []string  `json:"scopes"`
 }
 
+// Introspect queries the endpoint with an http request. It expects that the endpoint
+// implements https://tools.ietf.org/html/rfc7662
+func (m *Introspector) Introspect(token string, scopes ...string) (*introspector.Introspection, error) {
+	data := url.Values{
+		"token": []string{token},
+		"scope": []string{strings.Join(scopes, " ")},
+	}
+
+	url := m.IntrospectEndpoint.String()
+	req, err := http.NewRequest("POST", url, bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		return nil, errors.Annotatef(err, "new request for %s", url)
+	}
+
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+
+	var i res
+	err = bind(m.Client, req, &i)
+	if err != nil {
+		return nil, err
+	}
+	i.Introspection.Scope = strings.Join(i.Scopes, " ")
+	i.Introspection.IssuedAt = i.IssuedAt.Unix()
+	i.Introspection.ExpiresAt = i.ExpiresAt.Unix()
+	return &i.Introspection, nil
+
+}
+
 // Allowed calls the hydra endpoint to retrieve the info of a token and see if it has the permission to perform an action
 func (m *Introspector) Allowed(token string, perm introspector.Permission, scopes ...string) (*introspector.Introspection, bool, error) {
 	payload := req{
@@ -65,7 +96,7 @@ func (m *Introspector) Allowed(token string, perm introspector.Permission, scope
 		return nil, false, errors.Annotatef(err, "marshal payload %+v", payload)
 	}
 
-	url := m.Endpoint.String()
+	url := m.AllowedEndpoint.String()
 	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
 		return nil, false, errors.Annotatef(err, "new request for %s", url)
