@@ -55,8 +55,8 @@ func (m CachedKeyManager) GetRSAPublic(set string) (*rsa.PublicKey, error) {
 		return nil, errors.Annotatef(err, "new request for %s", url)
 	}
 
-	var keyset *jose.JsonWebKeySet
-	err = bind(m.Client, req, keyset)
+	var keyset jose.JsonWebKeySet
+	err = bind(m.Client, req, &keyset)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ func (m CachedKeyManager) GetRSAPrivate(set string) (*rsa.PrivateKey, error) {
 		return nil, errors.Annotatef(err, "new request for %s", url)
 	}
 
-	var keyset *jose.JsonWebKeySet
-	err = bind(m.Client, req, keyset)
+	var keyset jose.JsonWebKeySet
+	err = bind(m.Client, req, &keyset)
 	if err != nil {
 		return nil, err
 	}
