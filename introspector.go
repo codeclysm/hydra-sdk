@@ -36,22 +36,6 @@ func NewIntrospector(id, secret, cluster string) (*Introspector, error) {
 	return &manager, nil
 }
 
-type req struct {
-	Scopes   []string          `json:"scopes"`
-	Token    string            `json:"token"`
-	Resource string            `json:"resource"`
-	Action   string            `json:"action"`
-	Context  map[string]string `json:"context"`
-}
-
-type res struct {
-	introspector.Introspection
-	Allowed   bool      `json:"allowed"`
-	IssuedAt  time.Time `json:"iat"`
-	ExpiresAt time.Time `json:"exp"`
-	Scopes    []string  `json:"scopes"`
-}
-
 // Introspect queries the endpoint with an http request. It expects that the endpoint
 // implements https://tools.ietf.org/html/rfc7662
 func (m *Introspector) Introspect(token string) (*introspector.Introspection, error) {
@@ -68,16 +52,29 @@ func (m *Introspector) Introspect(token string) (*introspector.Introspection, er
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 
-	var i res
+	var i introspector.Introspection
 	err = bind(m.Client, req, &i)
 	if err != nil {
 		return nil, err
 	}
-	i.Introspection.Scope = strings.Join(i.Scopes, " ")
-	i.Introspection.IssuedAt = i.IssuedAt.Unix()
-	i.Introspection.ExpiresAt = i.ExpiresAt.Unix()
-	return &i.Introspection, nil
+	return &i, nil
 
+}
+
+type req struct {
+	Scopes   []string          `json:"scopes"`
+	Token    string            `json:"token"`
+	Resource string            `json:"resource"`
+	Action   string            `json:"action"`
+	Context  map[string]string `json:"context"`
+}
+
+type res struct {
+	introspector.Introspection
+	Allowed   bool      `json:"allowed"`
+	IssuedAt  time.Time `json:"iat"`
+	ExpiresAt time.Time `json:"exp"`
+	Scopes    []string  `json:"scopes"`
 }
 
 // Allowed calls the hydra endpoint to retrieve the info of a token and see if it has the permission to perform an action
