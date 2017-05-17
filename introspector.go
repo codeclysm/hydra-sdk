@@ -106,6 +106,7 @@ func (m *Introspector) Allowed(token string, perm introspector.Permission, scope
 	if err != nil {
 		return nil, false, err
 	}
+	i.Active = true
 	i.Introspection.Scope = strings.Join(i.Scopes, " ")
 	i.Introspection.IssuedAt = i.IssuedAt.Unix()
 	i.Introspection.ExpiresAt = i.ExpiresAt.Unix()
